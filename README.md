@@ -944,11 +944,217 @@ HashMap stores key-value pairs using hash table. Basic operations: put(), get(),
 ### Advanced Spring Boot
 
 175. **How does Spring manage bean lifecycle? What are the hooks?**
-     Lifecycle: Instantiation → Dependency Injection → BeanPostProcessor → InitializingBean.afterPropertiesSet() → @PostConstruct → Bean ready → @PreDestroy → DisposableBean.destroy()
+
+#### Spring Bean Lifecycle
+
+Spring manages beans in the **ApplicationContext (IoC container)**, and their lifecycle goes through several phases:
+
+1. **Instantiation** → Spring creates the bean instance (using `new` or factory methods).
+2. **Populate Properties** → Dependency Injection (DI) happens (e.g., `@Autowired` fields, setters).
+3. **BeanNameAware & BeanFactoryAware** → If the bean implements these, Spring injects metadata (bean name, BeanFactory, etc.).
+4. **BeanPostProcessors (before init)** → `postProcessBeforeInitialization()` is called for all registered `BeanPostProcessor`s.
+5. **Initialization**
+
+   * If bean implements `InitializingBean` → `afterPropertiesSet()` runs.
+   * If `initMethod` is defined in `@Bean` or XML → that method runs.
+6. **BeanPostProcessors (after init)** → `postProcessAfterInitialization()` is called.
+7. **Bean is Ready to Use** 🚀
+8. **Destruction** (when context closes or bean is removed)
+
+   * If bean implements `DisposableBean` → `destroy()` runs.
+   * If `destroyMethod` is defined in `@Bean` or XML → that method runs.
+
+
+#### Bean Lifecycle Hooks (Ways to Intervene)
+
+Spring gives you multiple hooks to interact with bean lifecycle:
+
+### **1. Annotations**
+
+* `@PostConstruct` → method called after bean initialization.
+* `@PreDestroy` → method called before bean destruction.
+
+```java
+@Component
+public class MyBean {
+    @PostConstruct
+    public void init() {
+        System.out.println("Bean is initialized!");
+    }
+
+    @PreDestroy
+    public void cleanup() {
+        System.out.println("Bean is about to be destroyed!");
+    }
+}
+```
+
+
+### **2. Interfaces**
+
+* `InitializingBean.afterPropertiesSet()` → init logic.
+* `DisposableBean.destroy()` → cleanup logic.
+
+```java
+@Component
+public class MyBean implements InitializingBean, DisposableBean {
+    @Override
+    public void afterPropertiesSet() {
+        System.out.println("Init via InitializingBean");
+    }
+
+    @Override
+    public void destroy() {
+        System.out.println("Cleanup via DisposableBean");
+    }
+}
+```
+
+
+
+### **3. @Bean Config Methods**
+
+In Java config:
+
+```java
+@Configuration
+public class AppConfig {
+    @Bean(initMethod = "customInit", destroyMethod = "customDestroy")
+    public MyBean myBean() {
+        return new MyBean();
+    }
+}
+```
+
+
+
+### **4. BeanPostProcessor**
+
+* Customizes beans **before and after initialization**.
+* Useful for cross-cutting logic (logging, proxies, AOP).
+
+```java
+@Component
+public class MyBeanPostProcessor implements BeanPostProcessor {
+    @Override
+    public Object postProcessBeforeInitialization(Object bean, String beanName) {
+        System.out.println("Before init: " + beanName);
+        return bean;
+    }
+
+    @Override
+    public Object postProcessAfterInitialization(Object bean, String beanName) {
+        System.out.println("After init: " + beanName);
+        return bean;
+    }
+}
+```
+
+
+#### Summary
+
+* **Lifecycle stages**: instantiation → DI → initialization → usage → destruction.
+* **Hooks**:
+
+  * `@PostConstruct`, `@PreDestroy`
+  * `InitializingBean`, `DisposableBean`
+  * `@Bean(initMethod, destroyMethod)`
+  * `BeanPostProcessor` (before/after init).
+
 
 176. **What is a proxy in Spring? JDK vs CGLIB proxies?**
-     - **JDK Proxy**: Interface-based, uses reflection
-     - **CGLIB Proxy**: Class-based, generates subclasses, used when no interfaces
+
+#### What is a Proxy in Spring?
+
+A **proxy** is a wrapper object created by Spring **around a bean** to intercept method calls.
+
+* Instead of calling the actual bean directly, Spring returns a **proxy object**.
+* The proxy can **add behavior before/after the actual method execution** (e.g., transactions, security checks, logging).
+* This is how Spring implements **cross-cutting concerns** without modifying business logic.
+
+ Example: If you put `@Transactional` on a method, Spring creates a **transactional proxy** around that bean. The proxy opens/closes the transaction before/after calling your method.
+
+
+#### Two Types of Proxies in Spring
+
+### 1. **JDK Dynamic Proxies**
+
+* Uses the Java Reflection API (`java.lang.reflect.Proxy`).
+* Works only if the bean implements at least **one interface**.
+* Proxy **implements the same interfaces** as the bean.
+* When you call a method via the proxy, it delegates to the target bean.
+
+**Example:**
+
+```java
+public interface PaymentService {
+    void pay();
+}
+
+@Service
+public class PaymentServiceImpl implements PaymentService {
+    public void pay() {
+        System.out.println("Payment processed");
+    }
+}
+```
+
+If proxied, Spring will create a **JDK proxy** that implements `PaymentService`.
+
+
+### 2. **CGLIB Proxies**
+
+* Uses **CGLIB (Code Generation Library)** to generate a subclass of the target class at runtime.
+* Works even if the bean has **no interfaces**.
+* Proxy = **subclass** of the target bean, with method interception.
+* Limitations:
+
+  * Can’t proxy `final` classes.
+  * Can’t override `final` methods.
+
+**Example:**
+
+```java
+@Service
+public class NotificationService {
+    public void send() {
+        System.out.println("Notification sent");
+    }
+}
+```
+
+ ince there’s no interface, Spring will use **CGLIB** to create a subclass proxy.
+
+
+#### Key Differences
+
+| Feature            | JDK Proxy                           | CGLIB Proxy                                              |
+| ------------------ | ----------------------------------- | -------------------------------------------------------- |
+| **Requirement**    | Target must implement interface     | Works on classes (no interface needed)                   |
+| **Implementation** | Uses `java.lang.reflect.Proxy`      | Uses subclassing via CGLIB                               |
+| **Limitations**    | Interfaces only                     | Cannot proxy `final` classes/methods                     |
+| **Performance**    | Slightly slower for interface calls | Slightly faster for direct method calls (since subclass) |
+| **Spring Default** | JDK (if interface present)          | Falls back to CGLIB otherwise                            |
+
+---
+
+####  Choosing Proxy Type
+
+* If your bean **implements an interface** → Spring uses **JDK proxy by default**.
+* If your bean **does not implement an interface** → Spring uses **CGLIB proxy**.
+* You can force CGLIB with:
+
+```properties
+spring.aop.proxy-target-class=true
+```
+
+
+ **Summary:**
+
+* A **proxy** in Spring is a wrapper around a bean to apply AOP features (transactions, security, logging).
+* **JDK proxies** → interface-based.
+* **CGLIB proxies** → subclass-based, used when no interface exists.
+
 
 177. **What is the difference between @Autowired, @Inject, and @Resource?**
      - **@Autowired**: Spring-specific, by type then by name
@@ -956,8 +1162,69 @@ HashMap stores key-value pairs using hash table. Basic operations: put(), get(),
      - **@Resource**: JSR-250 standard, by name then by type
 
 178. **Can you inject a prototype bean into a singleton? How?**
-     Yes, but prototype bean becomes singleton. Solutions: @Lookup method, ObjectFactory, ApplicationContext.getBean().
+Yes, you can inject a prototype bean into a singleton, but by default, the prototype bean will only be created once when the singleton is instantiated, effectively making it behave like a singleton. Here are several solutions to get a new prototype instance each time:
+The Problem
+```java
+@Component
+@Scope("singleton") // default scope
+public class SingletonService {
+    
+    @Autowired
+    private PrototypeBean prototypeBean; // Only created once!
+    
+    public void doSomething() {
+        prototypeBean.performTask(); // Always same instance
+    }
+}
 
+@Component
+@Scope("prototype")
+public class PrototypeBean {
+    // New instance should be created each time
+}
+```
+Solutions
+1. @Lookup Method (Recommended)
+```java
+@Component
+public abstract class SingletonService {
+    
+    public void doSomething() {
+        PrototypeBean prototypeBean = getPrototypeBean(); // New instance each call
+        prototypeBean.performTask();
+    }
+    
+    @Lookup
+    protected abstract PrototypeBean getPrototypeBean();
+}
+```
+2. ObjectFactory or Provider
+```java
+@Component
+public class SingletonService {
+    
+    @Autowired
+    private ObjectFactory<PrototypeBean> prototypeBeanFactory;
+    
+    public void doSomething() {
+        PrototypeBean prototypeBean = prototypeBeanFactory.getObject(); // New instance
+        prototypeBean.performTask();
+    }
+}
+
+// Or using Provider (JSR-330)
+@Component
+public class SingletonService {
+    
+    @Autowired
+    private Provider<PrototypeBean> prototypeBeanProvider;
+    
+    public void doSomething() {
+        PrototypeBean prototypeBean = prototypeBeanProvider.get(); // New instance
+        prototypeBean.performTask();
+    }
+}
+```
 179. **What is the default scope of a bean in Spring?**
      Singleton scope - one instance per Spring container.
 
