@@ -1229,12 +1229,162 @@ HashMap stores key-value pairs using hash table. Basic operations: put(), get(),
      - **Consumer**: Subscribes to topics and processes messages
 
 232. **What is a Partition in Kafka? How does partitioning work?**
-     Ordered, immutable sequence of messages. Partitioning enables parallelism and scalability. Messages with same key go to same partition.
+A Partition is a sub-division of a Kafka Topic.
+
+Each partition is an ordered, immutable log of messages.
+
+Messages are written sequentially and each message gets a unique, increasing offset (like an index).
+
+Partitions are the unit of parallelism in Kafka:
+
+More partitions → more consumers can read in parallel → higher throughput.
+
+ **Example**:
+A topic user-activity with 3 partitions:
+
+Partition 0: [offset 0 → msg1, offset 1 → msg2, ...]
+
+Partition 1: [offset 0 → msgA, offset 1 → msgB, ...]
+
+Partition 2: [offset 0 → msgX, offset 1 → msgY, ...]  
+**How Partitioning Works**  
+When a producer sends a message to a Kafka topic, the Kafka partitioner decides which partition the message should go to.
+
+Partition selection rules:
+
+Key-based partitioning (default)
+
+If you provide a message key, Kafka applies a hash function on the key → determines the partition.
+
+Ensures all messages with the same key always go to the same partition → ordering is guaranteed per key.
+```java
+ProducerRecord<String, String> record = 
+    new ProducerRecord<>("user-activity", "user123", "clicked_button");
+producer.send(record);
+```
+
+Here, "user123" is the key → always mapped to the same partition.
+
+Round-robin (no key)
+
+If you don’t provide a key, messages are distributed round-robin across partitions → balances load.
+
+Custom partitioner
+
+You can implement your own Partitioner class in Java for custom logic.
+
+🔹 Partitioning in Java (Example)
+```java
+import org.apache.kafka.clients.producer.*;
+
+import java.util.Properties;
+
+public class KafkaPartitioningExample {
+    public static void main(String[] args) {
+        Properties props = new Properties();
+        props.put("bootstrap.servers", "localhost:9092");
+        props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+        props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+
+        KafkaProducer<String, String> producer = new KafkaProducer<>(props);
+
+        // With key → ensures messages for same key go to same partition
+        ProducerRecord<String, String> keyedRecord =
+                new ProducerRecord<>("user-activity", "user123", "Login Event");
+
+        // Without key → round-robin partitioning
+        ProducerRecord<String, String> noKeyRecord =
+                new ProducerRecord<>("user-activity", "User signed up");
+
+        producer.send(keyedRecord, (metadata, exception) -> {
+            if (exception == null) {
+                System.out.println("Keyed message sent to partition " + metadata.partition());
+            } else {
+                exception.printStackTrace();
+            }
+        });
+
+        producer.send(noKeyRecord);
+        producer.close();
+    }
+}
+```
+Why Partitioning Matters
+
+Scalability → multiple partitions processed in parallel.
+
+Ordering → ordering is guaranteed only within a partition, not across the entire topic.
+
+Fault tolerance → partitions can be replicated to multiple brokers.
+
+So, Partition = ordered log of messages inside a topic. Partitioning in Java is controlled via keys (deterministic hashing) or round-robin if no key is provided.
 
 233. **What is a Kafka Topic, Producer, Consumer?**
-     - **Topic**: Logical channel for messages
-     - **Producer**: Client that sends messages to topics
-     - **Consumer**: Client that reads messages from topics
+####  Kafka Topic
+
+* A **Topic** is a **named stream of records** (like a category or channel).
+* Producers write messages **into a topic**.
+* Consumers read messages **from a topic**.
+* Topics are divided into **partitions**, and each partition is an ordered log of messages with unique offsets.
+* Example: A topic named `orders` could store all order events in an e-commerce app.
+
+---
+
+####  Kafka Producer
+
+* A **Producer** is a client application that **publishes (writes) messages** to Kafka topics.
+* Producers can:
+
+  1. Write messages **with a key** → ensures all messages with the same key go to the same partition.
+  2. Write messages **without a key** → Kafka distributes them round-robin across partitions.
+* Example in Java:
+
+  ```java
+  ProducerRecord<String, String> record = 
+      new ProducerRecord<>("orders", "order123", "New Order Created");
+  producer.send(record);
+  ```
+
+---
+
+#### Kafka Consumer
+
+* A **Consumer** is a client application that **subscribes to topics** and reads messages.
+
+* Each message is identified by its **offset** within the partition.
+
+* Consumers can work **individually** or as part of a **Consumer Group**:
+
+  * **Single consumer** → can read all partitions of a topic.
+  * **Consumer group** → partitions are distributed among group members for parallel processing.
+
+* Example in Java:
+
+  ```java
+  consumer.subscribe(Collections.singletonList("orders"));
+  while (true) {
+      ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
+      for (ConsumerRecord<String, String> record : records) {
+          System.out.printf("Consumed record: key=%s, value=%s, partition=%d, offset=%d%n",
+                            record.key(), record.value(), record.partition(), record.offset());
+      }
+  }
+  ```
+
+---
+
+#### Putting It Together
+
+* **Producer** → sends messages into a **Topic**.
+* **Consumer** → subscribes to the topic and processes messages.
+* **Topic** → acts as a durable, partitioned, replicated log in Kafka.
+
+ Think of it like **YouTube**:
+
+* A **Topic** = channel (e.g., "Tech Videos").
+* A **Producer** = content creator uploading videos.
+* A **Consumer** = subscribers watching videos.
+
 
 234. **What are Consumer Groups? How does rebalancing work?**
      Group of consumers sharing consumption of topic. Rebalancing redistributes partitions when consumers join/leave group.
@@ -1249,7 +1399,101 @@ HashMap stores key-value pairs using hash table. Basic operations: put(), get(),
      Framework for connecting Kafka with external systems. Use cases: database CDC, log aggregation, data pipeline.
 
 238. **How do you handle exactly-once delivery semantics?**
-     Use idempotent producers, transactional producers, and exactly-once consumption with proper offset management.
+Excellent question 🚀 — this is one of the most important (and tricky) parts of **Kafka**.
+
+---
+
+#### Message Delivery Semantics
+
+When dealing with distributed systems like Kafka, we talk about **delivery guarantees**:
+
+1. **At most once** → messages may be lost, but never redelivered.
+2. **At least once** → no messages are lost, but duplicates may occur.
+3. **Exactly once** → every message is delivered **once and only once**.
+
+Kafka’s challenge: handling **exactly once semantics (EOS)** in both **publishing** and **consumption**.
+
+---
+
+#### How Kafka Ensures Exactly-Once Delivery
+
+ 1. **Idempotent Producer**
+
+* Kafka provides **idempotent producers** (`enable.idempotence=true`).
+* Ensures that retries won’t cause duplicates, even if network errors happen.
+* Each producer gets a **Producer ID (PID)** and every message has a **sequence number** → Kafka deduplicates automatically.
+
+```properties
+enable.idempotence=true
+```
+
+---
+
+ 2. **Transactions (Atomic Writes)**
+
+* Kafka supports **transactions** that allow a producer to write to multiple partitions/topics atomically.
+* Either **all writes succeed** or **none are visible**.
+* Prevents partial updates that could break consistency.
+
+```java
+producer.initTransactions();
+producer.beginTransaction();
+
+producer.send(new ProducerRecord<>("orders", "order123", "created"));
+producer.send(new ProducerRecord<>("order-audit", "order123", "audit entry"));
+
+producer.commitTransaction();  // or abortTransaction() on failure
+```
+
+---
+
+ 3. **Consumer Offset Management with Transactions**
+
+* Normally, consumers store their offsets in Kafka (`__consumer_offsets` topic).
+* With EOS, consumers can commit **both offsets and output records in the same transaction**.
+* This guarantees **exactly-once processing**:
+
+  * If the transaction commits → output + offsets are stored.
+  * If it aborts → neither is stored, and Kafka retries safely.
+
+---
+
+#### Configuration for Exactly Once
+
+Producer:
+
+```properties
+enable.idempotence=true
+acks=all
+retries=Integer.MAX_VALUE
+transactional.id=my-transactional-producer
+```
+
+Consumer:
+
+```properties
+isolation.level=read_committed
+```
+
+---
+
+#### Key Points
+
+* **Idempotence** removes duplicates caused by retries.
+* **Transactions** ensure atomicity between producing data and committing offsets.
+* **Isolation level** ensures consumers only see committed messages.
+* Together, this gives Kafka **exactly-once semantics (EOS)** end-to-end.
+
+---
+
+**Summary:**
+To handle exactly-once delivery semantics in Kafka:
+
+1. Use **idempotent producers** (`enable.idempotence=true`).
+2. Use **transactions** (`transactional.id` + `beginTransaction/commitTransaction`).
+3. Configure consumers with `isolation.level=read_committed`.
+----
+
 
 239. **What is Kafka Streams? When to use it?**
      Library for building stream processing applications. Use for real-time data transformations, aggregations, joins.
