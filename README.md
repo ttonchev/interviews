@@ -844,6 +844,48 @@ HashMap stores key-value pairs using hash table. Basic operations: put(), get(),
 
 155. **What is metaspace in Java 8+?**
      Replaced PermGen in Java 8. Stores class metadata in native memory, automatically sized, reduces OutOfMemoryError.
+In **Java 8**, **Metaspace** is a memory space in the JVM that **replaced the PermGen (Permanent Generation)** used in earlier versions (Java 7 and below) for storing **class metadata**. Here’s a detailed breakdown:
+
+#### 1. **Purpose of Metaspace**
+
+Metaspace stores **metadata about classes** loaded by the JVM, such as:
+
+* Class names
+* Method and field information
+* Runtime constant pool
+* Annotations and bytecode-related metadata
+
+> Note: Unlike object instances, this is about the **structure of classes themselves**, not the objects created from them.
+
+#### 2. **Memory Management**
+
+* Metaspace **uses native memory**, not part of the Java heap.
+* JVM dynamically grows Metaspace as more classes are loaded.
+* You can **limit its size** using JVM flags:
+
+  ```bash
+  -XX:MetaspaceSize=128m       # Initial Metaspace size
+  -XX:MaxMetaspaceSize=512m    # Maximum Metaspace size
+  ```
+* If you don’t set `MaxMetaspaceSize`, it can grow until the system runs out of memory.
+
+#### 3. **Benefits of Metaspace**
+
+* Reduces `OutOfMemoryError` due to class metadata.
+* Removes the artificial fixed size limit of PermGen.
+* Easier class unloading when applications dynamically load/unload classes (e.g., in web servers or frameworks like Spring).
+
+
+### 4. **Common Metaspace Issues**
+
+* **Classloader leaks**: Classes are not unloaded because references are retained.
+* **Excessive class loading**: Libraries generating lots of dynamic classes (e.g., proxies in Hibernate or Spring AOP) can exhaust Metaspace.
+
+
+**Summary:**
+Metaspace in Java 8 is an **off-heap memory area** for class metadata that **replaces PermGen**, automatically grows by default, and reduces memory errors related to class loading.
+
+
 
 156. **How do you analyze heap dumps and thread dumps?**
      - **Heap Dumps**: Use Eclipse MAT, VisualVM to find memory leaks
@@ -853,44 +895,76 @@ HashMap stores key-value pairs using hash table. Basic operations: put(), get(),
 
 157. **What is the Executor framework in Java?**
      High-level API for managing threads. Provides ThreadPoolExecutor, ScheduledExecutorService, and various factory methods.
+     | Interface                  | Description                                                                                   |
+| -------------------------- | --------------------------------------------------------------------------------------------- |
+| `Executor`                 | The simplest interface. Has a single method `execute(Runnable command)` to run tasks.         |
+| `ExecutorService`          | Extends `Executor`. Provides more control (submit tasks, shutdown, get results via `Future`). |
+| `ScheduledExecutorService` | Extends `ExecutorService`. Supports scheduling tasks to run after a delay or periodically.    |
 
-158. **What is a Future in Java?**
+
+| Implementation         | Description                                                        |
+| ---------------------- | ------------------------------------------------------------------ |
+| `FixedThreadPool`      | A pool with a fixed number of threads.                             |
+| `CachedThreadPool`     | A pool that creates new threads as needed but reuses idle threads. |
+| `SingleThreadExecutor` | Ensures only one thread executes tasks sequentially.               |
+| `ScheduledThreadPool`  | Supports scheduling tasks to run after a delay or periodically.    |
+
+
+159. **What is a Future in Java?**
      Represents result of asynchronous computation. Provides methods to check completion, wait for completion, retrieve result.
+| Method                                  | Description                                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------------- |
+| `get()`                                 | Waits if necessary for the computation to complete and returns the result.            |
+| `get(long timeout, TimeUnit unit)`      | Waits up to the specified time for the computation to complete.                       |
+| `cancel(boolean mayInterruptIfRunning)` | Attempts to cancel the task. Returns `true` if successful.                            |
+| `isDone()`                              | Returns `true` if the task is completed (successfully, cancelled, or with exception). |
+| `isCancelled()`                         | Returns `true` if the task was cancelled before completion.                           |
 
-159. **What is a ThreadPool and why should you use it?**
+Future works with Callable<V> (which returns a value) and Runnable (wrapped as RunnableFuture).
+
+Calling get() blocks until the result is ready, but you can check isDone() first.
+
+You can cancel a task if it hasn’t finished yet.
+
+**Java 8 introduced CompletableFuture, which is more flexible and allows non-blocking callbacks and chaining.**
+
+160. **What is a ThreadPool and why should you use it?**
      Manages collection of worker threads. Benefits: reduces thread creation overhead, controls resource usage, improves performance.
 
-160. **What are the real differences between ReentrantLock and synchronized?**
+161. **What are the real differences between ReentrantLock and synchronized?**
      - **ReentrantLock**: Explicit locking, interruptible, try-lock, fair/unfair
      - **synchronized**: Implicit locking, built-in language support, simpler syntax
+synchronized: Lock is automatically acquired when entering a block/method and released when leaving (even on exceptions).
 
-161. **How does volatile differ from synchronized?**
+ReentrantLock: Lock must be manually acquired and released
+
+162. **How does volatile differ from synchronized?**
      - **volatile**: Ensures visibility, no atomicity, no blocking
      - **synchronized**: Ensures visibility and atomicity, can block threads
 
-162. **What's the difference between thread safety and atomicity?**
+163. **What's the difference between thread safety and atomicity?**
      - **Thread Safety**: Safe access from multiple threads
      - **Atomicity**: Operation completes entirely or not at all
 
-163. **When would you use CountDownLatch vs CyclicBarrier?**
+164. **When would you use CountDownLatch vs CyclicBarrier?**
      - **CountDownLatch**: One-time use, threads wait for event
      - **CyclicBarrier**: Reusable, threads wait for each other
 
-164. **What is the difference between busy-waiting vs blocking vs non-blocking calls?**
+165. **What is the difference between busy-waiting vs blocking vs non-blocking calls?**
      - **Busy-waiting**: Continuously checks condition, wastes CPU
      - **Blocking**: Thread sleeps until condition met
      - **Non-blocking**: Returns immediately, may indicate not ready
 
-165. **How does CompletableFuture work internally?**
+166. **How does CompletableFuture work internally?**
      Uses ForkJoinPool for async execution, maintains completion state, supports chaining and combining operations.
 
-166. **How do you avoid thread starvation?**
+167. **How do you avoid thread starvation?**
      - Use fair locks
      - Avoid holding locks too long
      - Use appropriate thread priorities
-     - Monitor thread pool health
+     - Monitor thread pool health (Monitor thread usage and task queue size. Ensure there are enough threads for all critical tasks.)
 
-167. **How would you write a thread-safe singleton?**
+168. **How would you write a thread-safe singleton?**
      ```java
      public class Singleton {
          private static volatile Singleton instance;
@@ -908,9 +982,17 @@ HashMap stores key-value pairs using hash table. Basic operations: put(), get(),
      }
      ```
 
-168. **What is the Producer-Consumer pattern? Implement with BlockingQueue?**
-     Pattern where producers create data and consumers process it.
-     ```java
+169. **What is the Producer-Consumer pattern? Implement with BlockingQueue?**
+The Producer-Consumer pattern is a classic concurrency design pattern where:
+
+Producers generate data and put it into a shared resource (buffer).
+
+Consumers take data from the buffer and process it.
+
+The goal is to decouple production from consumption, allowing both to work at their own pace while safely sharing data.
+
+In Java, this pattern can be easily implemented using BlockingQueue, which handles all the thread-safety and blocking mechanics.
+```java
      BlockingQueue<Integer> queue = new LinkedBlockingQueue<>();
      
      // Producer
@@ -920,24 +1002,41 @@ HashMap stores key-value pairs using hash table. Basic operations: put(), get(),
      Integer item = queue.take();
      ```
 
-169. **What is ForkJoinPool and how it differs from regular thread pools?**
+170. **What is ForkJoinPool and how it differs from regular thread pools?**
      Designed for divide-and-conquer algorithms. Uses work-stealing algorithm where idle threads steal work from busy threads.
+      Key Classes
+      
+      ForkJoinPool – the pool itself.
+      
+      RecursiveTask<V> – a task that returns a result.
+      
+      RecursiveAction – a task that does not return a result.
 
-170. **How do Java Stream operations work internally (parallel vs sequential)?**
+     | Feature         | Regular Thread Pool (`ExecutorService`) | ForkJoinPool                                                    |
+| --------------- | --------------------------------------- | --------------------------------------------------------------- |
+| Task Type       | Independent tasks                       | Recursive, divisible tasks                                      |
+| Work-Stealing   | ❌ Usually not                           | ✅ Idle threads steal work from busy threads                     |
+| Thread Usage    | Fixed number of threads or bounded pool | Typically one thread per CPU core (common parallelism = #cores) |
+| Suitable For    | I/O-bound or independent tasks          | CPU-bound, divide-and-conquer tasks                             |
+| Task Submission | `submit()` / `execute()`                | `fork()` / `join()` / `invoke()`                                |
+| Result Handling | `Future`                                | `join()` (blocking) or `invoke()`                               |
+
+
+172. **How do Java Stream operations work internally (parallel vs sequential)?**
      - **Sequential**: Single thread, processes elements in order
      - **Parallel**: Uses ForkJoinPool, splits work across multiple threads
 
-171. **What is a live-lock and how is it different from deadlock?**
+173. **What is a live-lock and how is it different from deadlock?**
      - **Deadlock**: Threads permanently blocked waiting for each other
-     - **Livelock**: Threads continuously change state in response to others, no progress
+     - **Livelock**: Threads continuously change state in response to others, no progress. Threads are not blocked, but they cannot make progress because they keep responding to each other.
 
-172. **What is the Java Memory Model (JMM)?**
+174. **What is the Java Memory Model (JMM)?**
      Defines how threads interact through memory, specifies happens-before relationships, visibility guarantees.
 
-173. **How does a Semaphore work? Real-life examples?**
+175. **How does a Semaphore work? Real-life examples?**
      Controls access to resource pool. Examples: connection pool, rate limiting, resource allocation.
 
-174. **What is a BlockingQueue? Types and use cases?**
+176. **What is a BlockingQueue? Types and use cases?**
      Thread-safe queue that blocks on empty (take) or full (put).
      Types: ArrayBlockingQueue, LinkedBlockingQueue, PriorityBlockingQueue, SynchronousQueue.
 
