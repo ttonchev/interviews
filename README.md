@@ -895,7 +895,8 @@ Metaspace in Java 8 is an **off-heap memory area** for class metadata that **rep
 
 157. **What is the Executor framework in Java?**
      High-level API for managing threads. Provides ThreadPoolExecutor, ScheduledExecutorService, and various factory methods.
-     | Interface                  | Description                                                                                   |
+     
+| Interface                  | Description                                                                                   |
 | -------------------------- | --------------------------------------------------------------------------------------------- |
 | `Executor`                 | The simplest interface. Has a single method `execute(Runnable command)` to run tasks.         |
 | `ExecutorService`          | Extends `Executor`. Provides more control (submit tasks, shutdown, get results via `Future`). |
@@ -911,7 +912,9 @@ Metaspace in Java 8 is an **off-heap memory area** for class metadata that **rep
 
 
 159. **What is a Future in Java?**
-     Represents result of asynchronous computation. Provides methods to check completion, wait for completion, retrieve result.
+Represents result of asynchronous computation. Provides methods to check completion, wait for completion, retrieve result.
+
+
 | Method                                  | Description                                                                           |
 | --------------------------------------- | ------------------------------------------------------------------------------------- |
 | `get()`                                 | Waits if necessary for the computation to complete and returns the result.            |
@@ -1000,7 +1003,7 @@ In Java, this pattern can be easily implemented using BlockingQueue, which handl
      
      // Consumer
      Integer item = queue.take();
-     ```
+```
 
 170. **What is ForkJoinPool and how it differs from regular thread pools?**
      Designed for divide-and-conquer algorithms. Uses work-stealing algorithm where idle threads steal work from busy threads.
@@ -1012,7 +1015,7 @@ In Java, this pattern can be easily implemented using BlockingQueue, which handl
       
       RecursiveAction – a task that does not return a result.
 
-     | Feature         | Regular Thread Pool (`ExecutorService`) | ForkJoinPool                                                    |
+| Feature         | Regular Thread Pool (`ExecutorService`) | ForkJoinPool                                                    |
 | --------------- | --------------------------------------- | --------------------------------------------------------------- |
 | Task Type       | Independent tasks                       | Recursive, divisible tasks                                      |
 | Work-Stealing   | ❌ Usually not                           | ✅ Idle threads steal work from busy threads                     |
