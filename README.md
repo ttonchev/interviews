@@ -499,18 +499,144 @@ HashMap stores key-value pairs using hash table. Basic operations: put(), get(),
 88. **Explain Java memory management**
     Java memory divided into: Heap (objects), Stack (method calls, local variables), Method Area (class metadata), PC Register, Native Method Stack.
 
-89. **What is garbage collection in Java? Types of GC?**
+#### **Overview**
+
+Java memory management is **automatic**, thanks to the **JVM (Java Virtual Machine)**. Developers don’t manually allocate or free memory (unlike C/C++).
+
+Memory in Java is broadly divided into:
+
+1. **Heap** – stores **objects** and **instance variables**.
+2. **Stack** – stores **primitive variables**, **references to objects**, and **method call frames**.
+3. **Metaspace / PermGen** – stores **class metadata** (class definitions, method info).
+
+
+#### **Heap Memory**
+
+* The **heap** is where **all objects live**.
+* Divided into **generations** for efficient garbage collection:
+
+| Generation               | Purpose                                        |
+| ------------------------ | ---------------------------------------------- |
+| Young Generation         | Short-lived objects (temporary objects)        |
+| - Eden space             | New objects are allocated here                 |
+| - Survivor spaces        | Objects survive minor GC cycles                |
+| Old / Tenured Generation | Long-lived objects (cached, static data, etc.) |
+| Permanent / Metaspace    | Class metadata, loaded classes                 |
+
+* **Garbage Collector (GC)** cleans the heap by removing objects **no longer referenced**.
+
+
+
+#### **Stack Memory**
+
+* Stores **method call frames**:
+
+  * Local variables (primitives and object references)
+  * Method parameters
+  * Return addresses
+
+* **LIFO structure:** last method called → first to return.
+
+* Stack memory is automatically freed when a method completes.
+
+**Example:**
+
+```java
+void foo() {
+    int x = 10;          // stored on stack
+    String s = "Hello";  // reference stored on stack, object on heap
+}
+```
+
+* `x` is primitive → fully on stack.
+* `s` is reference → stack holds pointer, heap holds the `"Hello"` object.
+
+#### **Program Counter (PC) Register**
+
+Each thread has its own PC register.
+
+Stores the address of the currently executing JVM instruction.
+
+Helps JVM know which instruction to execute next in a thread.
+
+#### **Native Method Stack**
+
+Stores information for native methods (methods written in languages like C/C++ and called via JNI).
+
+Each thread has its own native stack.
+
+Similar to JVM stack but used for native code execution.
+
+#### **Garbage Collection (GC)**
+
+* **GC automatically frees unused objects** in the heap.
+* **Reachability-based:** an object is eligible for GC if **no live references point to it**.
+
+**Common GC Algorithms:**
+
+1. **Serial GC** – single-threaded, simple, for small apps.
+2. **Parallel GC** – uses multiple threads, reduces pause time.
+3. **CMS (Concurrent Mark Sweep)** – minimizes GC pauses, concurrent with app threads.
+4. **G1 (Garbage First)** – divides heap into regions, balances pause time and throughput.
+
+**GC Phases:**
+
+1. **Mark** – find live objects.
+2. **Sweep** – delete unreachable objects.
+3. **Compact** – reduce fragmentation (optional, some collectors do it).
+
+
+#### **Memory Leaks in Java**
+
+Even though Java has GC, **memory leaks can still happen** if references are unintentionally held. Examples:
+
+* Static collections holding objects forever.
+* Event listeners not deregistered.
+* Caches without eviction policies.
+
+
+
+#### **Best Practices**
+
+1. Prefer **local variables** and scope-limited references.
+2. Use **try-with-resources** to close streams and connections.
+3. Avoid **long-lived object references** if not necessary.
+4. Choose **appropriate GC and JVM tuning** for high-performance apps.
+5. Use **profiling tools** (VisualVM, JConsole, JProfiler) to monitor memory usage.
+
+
+#### **Summary Diagram (Mental Model)**
+
+```
+Stack (method calls, primitives, references)
+ └─> Reference to object on Heap
+Heap (objects)
+ ├─> Young Generation (Eden + Survivor)
+ ├─> Old Generation (Tenured)
+ └─> Metaspace (class metadata)
+Garbage Collector cleans unreachable objects
+```
+
+💡 **Key Insight:**
+
+* **Stack = short-lived, method-scoped data**
+* **Heap = objects with variable lifespan**
+* **GC = automatically frees memory, but you must avoid lingering references**
+
+
+
+90. **What is garbage collection in Java? Types of GC?**
     Automatic memory management that reclaims unused objects.
     Types: Serial GC, Parallel GC, G1GC, ZGC, Shenandoah.
 
-90. **What is the finalize() method?**
+91. **What is the finalize() method?**
     Method called by garbage collector before object destruction. Deprecated in Java 9+ due to unpredictability.
 
-91. **Stack vs Heap Memory Allocation**
+92. **Stack vs Heap Memory Allocation**
     - **Stack**: Method calls, local variables, faster access, automatic cleanup
     - **Heap**: Objects, instance variables, slower access, garbage collected
 
-92. **How to handle OutOfMemoryException?**
+93. **How to handle OutOfMemoryException?**
     - Increase heap size (-Xmx)
     - Fix memory leaks
     - Optimize data structures
